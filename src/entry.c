@@ -12,11 +12,39 @@ static char* s_highscore_name;
 typedef struct {
   TextLayer *title_text;
   TextLayer *chars_text[NUM_ENTRY_CHARS];
+#ifdef PBL_SDK_2
   InverterLayer *invert;
+#elif PBL_SDK_3
+  Layer *invert;
+#endif
 
   char entry_chars[NUM_ENTRY_CHARS][2];
   uint8_t index;
 } EntryUi;
+
+#ifdef PBL_SDK_3
+static void invert_draw_proc(Layer *layer, GContext *ctx) {
+  // Get framebuffer data
+  GBitmap *fb = graphics_capture_frame_buffer(ctx);
+  uint8_t *fb_data = gbitmap_get_data(fb);
+  GRect frame = layer_get_frame(layer);
+  int rsb = gbitmap_get_bytes_per_row(fb);
+
+  // Flip all black to white, and vice versa
+  for(int y = frame.origin.y; y < frame.origin.y + frame.size.h; y++) {
+    for(int x = frame.origin.x; x < frame.origin.x + frame.size.w; x++) {
+      if(fb_data[(y * rsb) + x] == GColorWhite.argb) {
+        memset(&fb_data[(y * rsb) + x], GColorBlack.argb, 1);
+      } else if(fb_data[(y * rsb) + x] == GColorBlack.argb) {
+        memset(&fb_data[(y * rsb) + x], GColorWhite.argb, 1);
+      }
+    }
+  }
+
+  // Return the framebuffer
+  graphics_release_frame_buffer(ctx, fb);
+}
+#endif
 
 static void up_click_handler(ClickRecognizerRef recognizer, void* context) {
   Window* window = (Window*)context;
@@ -29,6 +57,9 @@ static void up_click_handler(ClickRecognizerRef recognizer, void* context) {
     }
     layer_mark_dirty(text_layer_get_layer(ui_data->chars_text[ui_data->index]));
   }
+#ifdef PBL_SDK_3
+  layer_mark_dirty(ui_data->invert);
+#endif
 }
 
 static void down_click_handler(ClickRecognizerRef recognizer, void* context) {
@@ -42,6 +73,9 @@ static void down_click_handler(ClickRecognizerRef recognizer, void* context) {
     }
     layer_mark_dirty(text_layer_get_layer(ui_data->chars_text[ui_data->index]));
   }
+#ifdef PBL_SDK_3
+  layer_mark_dirty(ui_data->invert);
+#endif
 }
 
 static void select_click_handler(ClickRecognizerRef recognizer, void* context) {
@@ -53,9 +87,12 @@ static void select_click_handler(ClickRecognizerRef recognizer, void* context) {
     ++ui_data->index;
   }
 
-  inverter_layer_destroy(ui_data->invert);
-  ui_data->invert = inverter_layer_create(GRect(41 + 20 * ui_data->index, 66, 15, 31));
-  layer_add_child(window_get_root_layer(window), inverter_layer_get_layer(ui_data->invert));
+#ifdef PBL_SDK_2
+  layer_set_frame(inverter_layer_get_layer(ui_data->invert), GRect(41 + 20 * ui_data->index, 66, 15, 31));
+#elif PBL_SDK_3
+  layer_set_frame(ui_data->invert, GRect(41 + 20 * ui_data->index, 66, 15, 31));
+  layer_mark_dirty(ui_data->invert);
+#endif
 }
 
 static void click_config_provider(void* context) {
@@ -92,8 +129,14 @@ static void window_load(Window *window) {
     layer_add_child(window_layer, text_layer_get_layer(ui_data->chars_text[i]));
   }
 
+#ifdef PBL_SDK_2
   ui_data->invert = inverter_layer_create(GRect(41, 66, 16, 31));
   layer_add_child(window_layer, inverter_layer_get_layer(ui_data->invert));
+#elif PBL_SDK_3
+  ui_data->invert = layer_create(GRect(41, 66, 16, 31));
+  layer_set_update_proc(ui_data->invert, invert_draw_proc);
+  layer_add_child(window_layer, ui_data->invert);
+#endif
 }
 
 static void window_unload(Window *window) {
@@ -105,7 +148,12 @@ static void window_unload(Window *window) {
     text_layer_destroy(ui_data->chars_text[i]);
   }
   s_highscore_name[3] = '\0';
+
+#ifdef PBL_SDK_2
   inverter_layer_destroy(ui_data->invert);
+#elif PBL_SDK_3
+  layer_destroy(ui_data->invert);
+#endif 
 }
 
 void entry_init() {
