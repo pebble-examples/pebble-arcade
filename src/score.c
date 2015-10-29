@@ -33,22 +33,25 @@ static void main_window_load(Window *window) {
   Layer *window_layer = window_get_root_layer(window);
   GRect bounds = layer_get_bounds(window_layer);
 
-  s_title_text = text_layer_create(GRect(0, 0, bounds.size.w, 64));
+  s_title_text = text_layer_create(GRect(0, PBL_IF_RECT_ELSE(0, 15), bounds.size.w, 64));
   text_layer_set_text(s_title_text, "HIGH SCORES");
   text_layer_set_text_alignment(s_title_text, GTextAlignmentCenter);
   text_layer_set_font(s_title_text, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
   layer_add_child(window_layer, text_layer_get_layer(s_title_text));
-
-  unsigned width = bounds.size.w / 2 - 10;
   
+  const uint8_t x_offset = PBL_IF_RECT_ELSE(10, 50);
+  const uint8_t y_offset = PBL_IF_RECT_ELSE(25, 40);
+
+  unsigned width = bounds.size.w / 2 - x_offset;
+
   // Buffers for stringification of s_score_array
   for (int i = 0; i < NUM_HIGH_SCORES; ++i) {
-    s_name_text[i] = text_layer_create(GRect(10, i * 15 + 25, width, 15));
+    s_name_text[i] = text_layer_create(GRect(x_offset, i * 15 + y_offset, width, 15));
     text_layer_set_text(s_name_text[i], s_score_array[i].name);
     text_layer_set_text_alignment(s_name_text[i], GTextAlignmentLeft);
     layer_add_child(window_layer, text_layer_get_layer(s_name_text[i]));
 
-    s_score_text[i] = text_layer_create(GRect(bounds.size.w - width - 10, i * 15 + 25, width, 15));
+    s_score_text[i] = text_layer_create(GRect(bounds.size.w - width - x_offset, i * 15 + y_offset, width, 15));
     snprintf(s_score_buf[i], sizeof(s_score_buf[i]), "%d", s_score_array[i].score);
     text_layer_set_text(s_score_text[i], s_score_buf[i]);
     text_layer_set_text_alignment(s_score_text[i], GTextAlignmentRight);

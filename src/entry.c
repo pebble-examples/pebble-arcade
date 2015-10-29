@@ -26,17 +26,27 @@ typedef struct {
 static void invert_draw_proc(Layer *layer, GContext *ctx) {
   // Get framebuffer data
   GBitmap *fb = graphics_capture_frame_buffer(ctx);
-  uint8_t *fb_data = gbitmap_get_data(fb);
   GRect frame = layer_get_frame(layer);
+
+#ifdef PBL_ROUND
+  GBitmapDataRowInfo row_info;
+  uint8_t *pixel;
+#else
   int rsb = gbitmap_get_bytes_per_row(fb);
+  uint8_t *fb_data = gbitmap_get_data(fb);
+#endif
 
   // Flip all black to white, and vice versa
   for(int y = frame.origin.y; y < frame.origin.y + frame.size.h; y++) {
     for(int x = frame.origin.x; x < frame.origin.x + frame.size.w; x++) {
-      if(fb_data[(y * rsb) + x] == GColorWhite.argb) {
-        memset(&fb_data[(y * rsb) + x], GColorBlack.argb, 1);
-      } else if(fb_data[(y * rsb) + x] == GColorBlack.argb) {
-        memset(&fb_data[(y * rsb) + x], GColorWhite.argb, 1);
+#ifdef PBL_ROUND
+      row_info = gbitmap_get_data_row_info(fb, y);
+      pixel = row_info.data + x;
+#endif
+      if(PBL_IF_RECT_ELSE(fb_data[(y * rsb) + x], *pixel) == GColorWhite.argb) {
+        memset(PBL_IF_RECT_ELSE(&fb_data[(y * rsb) + x], row_info.data + x), GColorBlack.argb, 1);
+      } else if(PBL_IF_RECT_ELSE(fb_data[(y * rsb) + x], *pixel) == GColorBlack.argb) {
+        memset(PBL_IF_RECT_ELSE(&fb_data[(y * rsb) + x], row_info.data + x), GColorWhite.argb, 1);
       }
     }
   }
@@ -90,7 +100,7 @@ static void select_click_handler(ClickRecognizerRef recognizer, void* context) {
 #ifdef PBL_SDK_2
   layer_set_frame(inverter_layer_get_layer(ui_data->invert), GRect(41 + 20 * ui_data->index, 66, 15, 31));
 #elif PBL_SDK_3
-  layer_set_frame(ui_data->invert, GRect(41 + 20 * ui_data->index, 66, 15, 31));
+  layer_set_frame(ui_data->invert, GRect(PBL_IF_RECT_ELSE(41, 60) + 20 * ui_data->index, 66, 15, 31));
   layer_mark_dirty(ui_data->invert);
 #endif
 }
@@ -116,13 +126,16 @@ static void window_load(Window *window) {
   text_layer_set_text_alignment(ui_data->title_text, GTextAlignmentCenter);
   text_layer_set_font(ui_data->title_text, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
   layer_add_child(window_layer, text_layer_get_layer(ui_data->title_text));
+#ifdef PBL_ROUND
+  text_layer_enable_screen_text_flow_and_paging(ui_data->title_text, 8);
+#endif
 
   ui_data->index = 0;
 
   for (int i = 0; i < NUM_ENTRY_CHARS; ++i) {
     strncpy(ui_data->entry_chars[i], "A", 2);
 
-    ui_data->chars_text[i] = text_layer_create(GRect(42 + 20 * i, 64, 15, 50));
+    ui_data->chars_text[i] = text_layer_create(GRect(PBL_IF_RECT_ELSE(42, 60) + 20 * i, 64, 15, 50));
     text_layer_set_font(ui_data->chars_text[i], fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
     text_layer_set_text_alignment(ui_data->chars_text[i], GTextAlignmentCenter);
     text_layer_set_text(ui_data->chars_text[i], ui_data->entry_chars[i]);
@@ -133,7 +146,7 @@ static void window_load(Window *window) {
   ui_data->invert = inverter_layer_create(GRect(41, 66, 16, 31));
   layer_add_child(window_layer, inverter_layer_get_layer(ui_data->invert));
 #elif PBL_SDK_3
-  ui_data->invert = layer_create(GRect(41, 66, 16, 31));
+  ui_data->invert = layer_create(GRect(PBL_IF_RECT_ELSE(41, 60), 66, 16, 31));
   layer_set_update_proc(ui_data->invert, invert_draw_proc);
   layer_add_child(window_layer, ui_data->invert);
 #endif
