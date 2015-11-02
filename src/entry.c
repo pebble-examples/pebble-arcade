@@ -6,103 +6,46 @@
 #define REPEAT_INTERVAL_MS 100
 
 static Window *s_entry_window;
+static TextLayer *s_title_text, *s_chars_layers[NUM_ENTRY_CHARS];
+static TextLayer *s_selection_layer;
+static char* s_highscore_name; // Pointer to put the name into.
+static char s_entry_chars[NUM_ENTRY_CHARS][2];
+static uint8_t s_selection_index;
 
-static char* s_highscore_name;
-
-typedef struct {
-  TextLayer *title_text;
-  TextLayer *chars_text[NUM_ENTRY_CHARS];
-#ifdef PBL_SDK_2
-  InverterLayer *invert;
-#elif PBL_SDK_3
-  Layer *invert;
-#endif
-
-  char entry_chars[NUM_ENTRY_CHARS][2];
-  uint8_t index;
-} EntryUi;
-
-#ifdef PBL_SDK_3
-static void invert_draw_proc(Layer *layer, GContext *ctx) {
-  // Get framebuffer data
-  GBitmap *fb = graphics_capture_frame_buffer(ctx);
-  GRect frame = layer_get_frame(layer);
-
-#ifdef PBL_ROUND
-  GBitmapDataRowInfo row_info;
-  uint8_t *pixel;
-#else
-  int rsb = gbitmap_get_bytes_per_row(fb);
-  uint8_t *fb_data = gbitmap_get_data(fb);
-#endif
-
-  // Flip all black to white, and vice versa
-  for(int y = frame.origin.y; y < frame.origin.y + frame.size.h; y++) {
-    for(int x = frame.origin.x; x < frame.origin.x + frame.size.w; x++) {
-#ifdef PBL_ROUND
-      row_info = gbitmap_get_data_row_info(fb, y);
-      pixel = row_info.data + x;
-#endif
-      if(PBL_IF_RECT_ELSE(fb_data[(y * rsb) + x], *pixel) == GColorWhite.argb) {
-        memset(PBL_IF_RECT_ELSE(&fb_data[(y * rsb) + x], row_info.data + x), GColorBlack.argb, 1);
-      } else if(PBL_IF_RECT_ELSE(fb_data[(y * rsb) + x], *pixel) == GColorBlack.argb) {
-        memset(PBL_IF_RECT_ELSE(&fb_data[(y * rsb) + x], row_info.data + x), GColorWhite.argb, 1);
-      }
-    }
-  }
-
-  // Return the framebuffer
-  graphics_release_frame_buffer(ctx, fb);
-}
-#endif
 
 static void up_click_handler(ClickRecognizerRef recognizer, void* context) {
-  Window* window = (Window*)context;
-  EntryUi* ui_data = (EntryUi*)window_get_user_data(window);
-  if (ui_data->index < NUM_ENTRY_CHARS) {
-    if (ui_data->entry_chars[ui_data->index][0] == 'Z') {
-      ui_data->entry_chars[ui_data->index][0] = 'A';
+  if (s_selection_index < NUM_ENTRY_CHARS) {
+    if (s_entry_chars[s_selection_index][0] == 'Z') {
+      s_entry_chars[s_selection_index][0] = 'A';
     } else {
-      ++ui_data->entry_chars[ui_data->index][0];
+      s_entry_chars[s_selection_index][0]++;
     }
-    layer_mark_dirty(text_layer_get_layer(ui_data->chars_text[ui_data->index]));
+    layer_mark_dirty(text_layer_get_layer(s_chars_layers[s_selection_index]));
   }
-#ifdef PBL_SDK_3
-  layer_mark_dirty(ui_data->invert);
-#endif
 }
 
 static void down_click_handler(ClickRecognizerRef recognizer, void* context) {
-  Window* window = (Window*)context;
-  EntryUi* ui_data = (EntryUi*)window_get_user_data(window);
-  if (ui_data->index < NUM_ENTRY_CHARS) {
-    if (ui_data->entry_chars[ui_data->index][0] == 'A') {
-      ui_data->entry_chars[ui_data->index][0] = 'Z';
+  if (s_selection_index < NUM_ENTRY_CHARS) {
+    if (s_entry_chars[s_selection_index][0] == 'A') {
+      s_entry_chars[s_selection_index][0] = 'Z';
     } else {
-      --ui_data->entry_chars[ui_data->index][0];
+      s_entry_chars[s_selection_index][0]--;
     }
-    layer_mark_dirty(text_layer_get_layer(ui_data->chars_text[ui_data->index]));
+    layer_mark_dirty(text_layer_get_layer(s_chars_layers[s_selection_index]));
   }
-#ifdef PBL_SDK_3
-  layer_mark_dirty(ui_data->invert);
-#endif
 }
 
 static void select_click_handler(ClickRecognizerRef recognizer, void* context) {
-  Window* window = (Window*)context;
-  EntryUi* ui_data = (EntryUi*)window_get_user_data(window);
-  if (ui_data->index == 2) {
-    ui_data->index = 0;
+  text_layer_set_text_color(s_chars_layers[s_selection_index], GColorBlack);
+
+  if (s_selection_index == 2) {
+    s_selection_index = 0;
   } else {
-    ++ui_data->index;
+    ++s_selection_index;
   }
 
-#ifdef PBL_SDK_2
-  layer_set_frame(inverter_layer_get_layer(ui_data->invert), GRect(41 + 20 * ui_data->index, 66, 15, 31));
-#elif PBL_SDK_3
-  layer_set_frame(ui_data->invert, GRect(PBL_IF_RECT_ELSE(41, 60) + 20 * ui_data->index, 66, 15, 31));
-  layer_mark_dirty(ui_data->invert);
-#endif
+  text_layer_set_text_color(s_chars_layers[s_selection_index], GColorWhite);
+  layer_set_frame(text_layer_get_layer(s_selection_layer), GRect(PBL_IF_RECT_ELSE(41, 60) + (20 * s_selection_index), 66, 15, 31));
 }
 
 static void click_config_provider(void* context) {
@@ -120,61 +63,49 @@ static void window_load(Window *window) {
   Layer *window_layer = window_get_root_layer(window);
   GRect bounds = layer_get_bounds(window_layer);
 
-  EntryUi* ui_data = (EntryUi*)window_get_user_data(window);
-  ui_data->title_text = text_layer_create(GRect(0, 0, bounds.size.w, 64));
-  text_layer_set_text(ui_data->title_text, "NEW HIGH SCORE!");
-  text_layer_set_text_alignment(ui_data->title_text, GTextAlignmentCenter);
-  text_layer_set_font(ui_data->title_text, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
-  layer_add_child(window_layer, text_layer_get_layer(ui_data->title_text));
+  s_title_text = text_layer_create(GRect(0, 0, bounds.size.w, 64));
+  text_layer_set_text(s_title_text, "NEW HIGH SCORE!");
+  text_layer_set_text_alignment(s_title_text, GTextAlignmentCenter);
+  text_layer_set_font(s_title_text, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
+  layer_add_child(window_layer, text_layer_get_layer(s_title_text));
 #ifdef PBL_ROUND
-  text_layer_enable_screen_text_flow_and_paging(ui_data->title_text, 8);
+  text_layer_enable_screen_text_flow_and_paging(s_title_text, 8);
 #endif
 
-  ui_data->index = 0;
+  s_selection_layer = text_layer_create(GRect(PBL_IF_RECT_ELSE(41, 60), 66, 15, 31));
+  text_layer_set_background_color(s_selection_layer, GColorBlack);
+  layer_add_child(window_layer, text_layer_get_layer(s_selection_layer));
 
   for (int i = 0; i < NUM_ENTRY_CHARS; ++i) {
-    strncpy(ui_data->entry_chars[i], "A", 2);
+    strncpy(s_entry_chars[i], "A", 2);
 
-    ui_data->chars_text[i] = text_layer_create(GRect(PBL_IF_RECT_ELSE(42, 60) + 20 * i, 64, 15, 50));
-    text_layer_set_font(ui_data->chars_text[i], fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
-    text_layer_set_text_alignment(ui_data->chars_text[i], GTextAlignmentCenter);
-    text_layer_set_text(ui_data->chars_text[i], ui_data->entry_chars[i]);
-    layer_add_child(window_layer, text_layer_get_layer(ui_data->chars_text[i]));
+    s_chars_layers[i] = text_layer_create(GRect(PBL_IF_RECT_ELSE(41, 60) + (20 * i), 66, 15, 31));
+    text_layer_set_font(s_chars_layers[i], fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
+    text_layer_set_text_alignment(s_chars_layers[i], GTextAlignmentCenter);
+    text_layer_set_text(s_chars_layers[i], s_entry_chars[i]);
+    text_layer_set_background_color(s_chars_layers[i], GColorClear);
+    layer_add_child(window_layer, text_layer_get_layer(s_chars_layers[i]));
   }
 
-#ifdef PBL_SDK_2
-  ui_data->invert = inverter_layer_create(GRect(41, 66, 16, 31));
-  layer_add_child(window_layer, inverter_layer_get_layer(ui_data->invert));
-#elif PBL_SDK_3
-  ui_data->invert = layer_create(GRect(PBL_IF_RECT_ELSE(41, 60), 66, 16, 31));
-  layer_set_update_proc(ui_data->invert, invert_draw_proc);
-  layer_add_child(window_layer, ui_data->invert);
-#endif
+  s_selection_index = 0;
+  text_layer_set_text_color(s_chars_layers[s_selection_index], GColorWhite);
 }
 
 static void window_unload(Window *window) {
-  EntryUi* ui_data = (EntryUi*)window_get_user_data(window);
+  text_layer_destroy(s_title_text);
 
-  text_layer_destroy(ui_data->title_text);
-  for (int i = 0; i < NUM_ENTRY_CHARS; ++i) {
-    s_highscore_name[i] = ui_data->entry_chars[i][0];
-    text_layer_destroy(ui_data->chars_text[i]);
+  for (int i = 0; i < NUM_ENTRY_CHARS; i++) {
+    s_highscore_name[i] = s_entry_chars[i][0];
+    text_layer_destroy(s_chars_layers[i]);
   }
-  s_highscore_name[3] = '\0';
+  text_layer_destroy(s_selection_layer);
 
-#ifdef PBL_SDK_2
-  inverter_layer_destroy(ui_data->invert);
-#elif PBL_SDK_3
-  layer_destroy(ui_data->invert);
-#endif 
+  // NULL-terminate the string and return
+  s_highscore_name[3] = '\0';
 }
 
 void entry_init() {
   s_entry_window = window_create();
-
-  // Store ui data as window user_data
-  EntryUi* ui_data = malloc(sizeof(EntryUi));
-  window_set_user_data(s_entry_window, ui_data);
 
   window_set_click_config_provider_with_context(s_entry_window, click_config_provider, (void*)s_entry_window);
   window_set_window_handlers(s_entry_window, (WindowHandlers) {
@@ -184,9 +115,6 @@ void entry_init() {
 }
 
 void entry_deinit() {
-  // Delete stored window user_data
-  EntryUi* ui_data = (EntryUi*)window_get_user_data(s_entry_window);
-  free(ui_data);
   window_destroy(s_entry_window);
 }
 
