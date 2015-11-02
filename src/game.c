@@ -66,11 +66,11 @@ static void main_window_load(Window *window) {
   Layer *window_layer = window_get_root_layer(window);
   GRect bounds = layer_get_bounds(window_layer);
 
-  s_score_text = text_layer_create(GRect(0, 72, bounds.size.w, 20));
+  s_score_text = text_layer_create(GRect(0, PBL_IF_RECT_ELSE(72, 100), bounds.size.w, 20));
   text_layer_set_text_alignment(s_score_text, GTextAlignmentCenter);
   layer_add_child(window_layer, text_layer_get_layer(s_score_text));
 
-  s_time_text = text_layer_create(GRect(0, 0, bounds.size.w, 64));
+  s_time_text = text_layer_create(GRect(0, PBL_IF_RECT_ELSE(0, 30), bounds.size.w, 64));
   text_layer_set_text_alignment(s_time_text, GTextAlignmentCenter);
   text_layer_set_font(s_time_text, fonts_get_system_font(FONT_KEY_BITHAM_42_BOLD));
   layer_add_child(window_layer, text_layer_get_layer(s_time_text));
